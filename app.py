@@ -48,8 +48,8 @@ def process_text_with_gemini(product_imgs, style_imgs, user_text):
 
 # --- FUNGSI 2: HUGGINGFACE (LUKIS GAMBAR - GUNA LIBRARY) ---
 def generate_image_with_hf(prompt_text):
-    # Kita guna model yang paling stabil: Stability AI 2.1
-    model_id = "stabilityai/stable-diffusion-2-1"
+    # Kita tukar ke model 'runwayml' yang tak perlu lesen (Public)
+    model_id = "runwayml/stable-diffusion-v1-5"
     
     try:
         # Arahan mudah kepada plugin: "Tolong lukiskan ini"
@@ -105,3 +105,4 @@ with col2:
                 
             except Exception as e:
                 st.error(f"Ralat Utama: {e}")
+
