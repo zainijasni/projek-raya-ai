@@ -10,7 +10,10 @@ try:
     if "GOOGLE_API_KEY" in st.secrets:
         GOOGLE_API_KEY = st.secrets["GOOGLE_API_KEY"]
         genai.configure(api_key=GOOGLE_API_KEY)
-        model = genai.GenerativeModel('gemini-flash-latest') 
+        
+        # --- KITA TUKAR KE MODEL 2.0 (QUOTA BARU) ---
+        model = genai.GenerativeModel('gemini-2.0-flash') 
+        # --------------------------------------------
     
     if "HF_API_KEY" in st.secrets:
         HF_API_KEY = st.secrets["HF_API_KEY"]
@@ -42,12 +45,12 @@ def process_text_with_gemini(product_imgs, style_imgs, user_text):
 
 # --- FUNGSI HUGGINGFACE (MODEL OPENJOURNEY) ---
 def generate_image_with_hf(prompt_text):
-    # KITA GUNA MODEL LAIN: OpenJourney (Gaya Midjourney)
-    # Model ni selalunya lebih stabil dari runwayml
+    # Model: OpenJourney (Gaya Midjourney)
     API_URL = "https://api-inference.huggingface.co/models/prompthero/openjourney"
     
     headers = {"Authorization": f"Bearer {HF_API_KEY}"}
-    payload = {"inputs": f"mdjrny-v4 style, {prompt_text}"} # Kena tambah keyword khas
+    # OpenJourney perlukan keyword 'mdjrny-v4 style'
+    payload = {"inputs": f"mdjrny-v4 style, {prompt_text}"} 
     
     # Auto-Retry 3 kali
     for attempt in range(3):
@@ -77,7 +80,7 @@ def generate_image_with_hf(prompt_text):
 # --- FRONTEND ---
 st.set_page_config(page_title="AI Raya Generator", layout="wide")
 st.title("🌙 AI Raya Marketing Generator")
-st.caption("Model: OpenJourney (Midjourney Style)")
+st.caption("Model: Gemini 2.0 Flash + OpenJourney")
 
 col1, col2 = st.columns([1, 1])
 
@@ -95,7 +98,7 @@ with col2:
         style_images_pil = [Image.open(f) for f in style_files] if style_files else []
 
         with st.status("Sedang memproses...", expanded=True) as status:
-            status.write("🧠 Gemini sedang berfikir prompt...")
+            status.write("🧠 Gemini 2.0 sedang berfikir prompt...")
             final_prompt = process_text_with_gemini(product_images_pil, style_images_pil, user_desc)
             
             if "Error" in final_prompt:
