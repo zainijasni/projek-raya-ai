@@ -3,36 +3,22 @@ import google.generativeai as genai
 from PIL import Image
 import requests
 import io
-# --- TAMBAH BARIS INI UNTUK CHECK VERSION ---
-st.warning(f"Versi Google AI yang diinstall: {genai.__version__}") 
-# --------------------------------------------
-# ... sambung kod lain di bawah ...
-# --- DEBUGGING: Tunjukkan Senarai Model ---
-try:
-    st.subheader("🔍 Diagnostik Model")
-    if st.button("Check Model Availability"):
-        available_models = []
-        for m in genai.list_models():
-            if 'generateContent' in m.supported_generation_methods:
-                available_models.append(m.name)
-        st.write("Model yang ditemui:", available_models)
-except Exception as e:
-    st.error(f"Error Checking Models: {e}")
-# ------------------------------------------
-# --- KONFIGURASI API (RAHSIA) ---
+
+# --- KONFIGURASI API ---
 try:
     # 1. Setup Gemini (Otak)
     if "GOOGLE_API_KEY" in st.secrets:
         GOOGLE_API_KEY = st.secrets["GOOGLE_API_KEY"]
         genai.configure(api_key=GOOGLE_API_KEY)
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        
+        # KITA GUNA MODEL YANG ADA DALAM LIST AWAK (V2.0)
+        model = genai.GenerativeModel('gemini-2.0-flash') 
     else:
         st.error("Google API Key tiada dalam Secrets!")
 
     # 2. Setup HuggingFace (Pelukis)
     if "HF_API_KEY" in st.secrets:
         HF_API_KEY = st.secrets["HF_API_KEY"]
-        # Kita guna model 'Stable Diffusion XL' (Percuma & Cantik)
         HF_API_URL = "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0"
         headers = {"Authorization": f"Bearer {HF_API_KEY}"}
     else:
@@ -65,13 +51,19 @@ def process_text_with_gemini(product_imgs, style_imgs, user_text):
 # --- FUNGSI 2: HUGGINGFACE (LUKIS GAMBAR) ---
 def generate_image_with_hf(prompt_text):
     payload = {"inputs": prompt_text}
-    response = requests.post(HF_API_URL, headers=headers, json=payload)
-    return response.content
+    try:
+        response = requests.post(HF_API_URL, headers=headers, json=payload)
+        return response.content
+    except Exception as e:
+        return None
 
 # --- FRONTEND (MUKA DEPAN) ---
 st.set_page_config(page_title="AI Raya Generator", layout="wide")
 st.title("🌙 AI Raya Marketing Generator")
 st.markdown("Upload produk anda, AI akan fikirkan idea & lukiskan poster Raya!")
+
+# Papar versi model (kecil di bawah tajuk untuk rujukan kita)
+st.caption("Powered by Gemini 2.0 Flash & Stable Diffusion XL")
 
 col1, col2 = st.columns([1, 1])
 
@@ -90,11 +82,13 @@ with col2:
 
         with st.status("Sedang memproses...", expanded=True) as status:
             # Step 1: Gemini fikir prompt
-            status.write("🧠 Gemini sedang berfikir idea...")
+            status.write("🧠 Gemini 2.0 sedang berfikir idea...")
             try:
                 final_prompt = process_text_with_gemini(product_images_pil, style_images_pil, user_desc)
                 status.write("✅ Idea siap! Menghantar ke pelukis...")
-                st.info(f"Prompt AI: {final_prompt}") # Tunjuk prompt pada user
+                
+                with st.expander("Lihat Prompt (Rahsia AI)"):
+                    st.code(final_prompt)
                 
                 # Step 2: HuggingFace lukis gambar
                 status.write("🎨 Sedang melukis gambar (Mungkin ambil masa 30s)...")
@@ -107,14 +101,8 @@ with col2:
                     status.update(label="Siap!", state="complete", expanded=False)
                     st.success("Gambar berjaya dihasilkan!")
                 except Exception as img_error:
-                    st.warning("Gambar gagal dibuka. HuggingFace mungkin sedang 'Loading Model'. Sila tekan butang Jana sekali lagi dalam 20 saat.")
-                    st.error(f"Error detail: {image_bytes}")
-
+                    # Kadang2 HF bagi error JSON kalau model tengah loading
+                    st.warning("Model Pelukis sedang 'Warming Up'. Sila tekan butang Jana sekali lagi dalam 20 saat.")
+                    
             except Exception as e:
                 st.error(f"Ralat Sistem: {e}")
-
-
-
-
-
-
