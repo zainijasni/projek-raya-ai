@@ -3,7 +3,11 @@ import google.generativeai as genai
 from PIL import Image
 import requests
 import io
+# --- TAMBAH BARIS INI UNTUK CHECK VERSION ---
+st.warning(f"Versi Google AI yang diinstall: {genai.__version__}") 
+# --------------------------------------------
 
+# ... sambung kod lain di bawah ...
 # --- KONFIGURASI API (RAHSIA) ---
 try:
     # 1. Setup Gemini (Otak)
@@ -97,6 +101,7 @@ with col2:
 
             except Exception as e:
                 st.error(f"Ralat Sistem: {e}")
+
 
 
 
