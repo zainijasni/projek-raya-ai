@@ -2,6 +2,5 @@ streamlit
 google-generativeai
 pillow
 requests
-huggingface_hub
 
 
