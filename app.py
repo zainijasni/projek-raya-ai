@@ -19,8 +19,11 @@ try:
     # 2. Setup HuggingFace (Pelukis)
     if "HF_API_KEY" in st.secrets:
         HF_API_KEY = st.secrets["HF_API_KEY"]
-        # Kita guna model v1-5 yang paling stabil
-        HF_API_URL = "https://api-inference.huggingface.co/models/runwayml/stable-diffusion-v1-5"
+        
+        # --- PERUBAHAN UTAMA DI SINI (Guna alamat 'router') ---
+        HF_API_URL = "https://router.huggingface.co/models/runwayml/stable-diffusion-v1-5"
+        # ------------------------------------------------------
+        
         headers = {"Authorization": f"Bearer {HF_API_KEY}"}
     else:
         st.error("HuggingFace API Key tiada dalam Secrets!")
@@ -45,7 +48,7 @@ def process_text_with_gemini(product_imgs, style_imgs, user_text):
     response = model.generate_content(prompt_structure)
     return response.text
 
-# --- FUNGSI 2: HUGGINGFACE (LUKIS GAMBAR - VERSI DEGIL) ---
+# --- FUNGSI 2: HUGGINGFACE (LUKIS GAMBAR - AUTO RETRY) ---
 def generate_image_with_hf(prompt_text):
     payload = {"inputs": prompt_text}
     
@@ -59,16 +62,18 @@ def generate_image_with_hf(prompt_text):
             if response.status_code == 200:
                 return response.content
             
-            # Kalau server kata "Loading" (Biasanya ada 'estimated_time')
+            # Kalau server kata "Loading"
             elif "estimated_time" in response.text:
                 data = response.json()
                 wait_time = data.get("estimated_time", 20)
-                st.warning(f"Percubaan {attempt+1}/{max_retries}: Server sedang 'warm up'. Menunggu {wait_time:.1f} saat...")
-                time.sleep(wait_time) # Kod akan berhenti rehat sekejap di sini
+                st.warning(f"Percubaan {attempt+1}/{max_retries}: Server sedang 'panaskan enjin'. Menunggu {wait_time:.1f} saat...")
+                time.sleep(wait_time) 
             
             else:
                 st.error(f"Error HuggingFace: {response.text}")
-                return None
+                # Kalau error pelik, stop terus
+                if "supported" in response.text: return None 
+                time.sleep(3)
                 
         except Exception as e:
             st.error(f"Connection Error: {e}")
@@ -104,8 +109,7 @@ with col2:
                 status.write("✅ Idea siap! Menghantar ke pelukis...")
                 st.code(final_prompt, language="text")
                 
-                # Panggil fungsi yang dah ada auto-retry
-                status.write("🎨 Sedang melukis (Mungkin ambil masa)...")
+                status.write("🎨 Sedang melukis...")
                 image_bytes = generate_image_with_hf(final_prompt)
                 
                 if image_bytes:
