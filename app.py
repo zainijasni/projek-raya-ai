@@ -1,101 +1,82 @@
 import streamlit as st
 import google.generativeai as genai
 from PIL import Image
+import requests
 import io
-from huggingface_hub import InferenceClient # Kita guna 'driver' rasmi
+import time
 
-# --- KONFIGURASI API ---
+# --- KONFIGURASI ---
 try:
-    # 1. Setup Gemini
     if "GOOGLE_API_KEY" in st.secrets:
         GOOGLE_API_KEY = st.secrets["GOOGLE_API_KEY"]
         genai.configure(api_key=GOOGLE_API_KEY)
-        model = genai.GenerativeModel('gemini-flash-latest') 
-    else:
-        st.error("Google API Key tiada dalam Secrets!")
-
-    # 2. Setup HuggingFace (Client Rasmi)
+        model = genai.GenerativeModel('gemini-flash-latest')
+    
     if "HF_API_KEY" in st.secrets:
         HF_API_KEY = st.secrets["HF_API_KEY"]
-        # Client ini pandai cari jalan sendiri (Auto-Router)
-        client = InferenceClient(token=HF_API_KEY)
     else:
-        st.error("HuggingFace API Key tiada dalam Secrets!")
+        st.error("TIADA HF KEY!")
 
 except Exception as e:
-    st.error(f"Ralat Setup: {e}")
+    st.error(f"Setup Error: {e}")
 
-# --- FUNGSI 1: GEMINI ---
-def process_text_with_gemini(product_imgs, style_imgs, user_text):
-    prompt_structure = [
-        "Role: Professional Photographer.",
-        "Task: Create a highly detailed image generation prompt.",
-        "INSTRUCTION: Describe the product in a festive Hari Raya setting.",
-        f"USER REQUEST: {user_text}",
-        "OUTPUT: A single paragraph of English text.",
-        "\n--- PRODUCT IMAGES ---"
-    ]
-    for img in product_imgs: prompt_structure.append(img)
-    if style_imgs:
-        for img in style_imgs: prompt_structure.append(img)
-
+# --- FUNGSI GEMINI ---
+def get_gemini_prompt(user_text):
     try:
-        response = model.generate_content(prompt_structure)
+        # Prompt simple je untuk test
+        response = model.generate_content(f"Create a short image prompt for: {user_text}")
         return response.text
     except Exception as e:
-        return f"Error Gemini: {e}"
+        return f"Gemini Error: {e}"
 
-# --- FUNGSI 2: HUGGINGFACE (LUKIS GAMBAR) ---
-def generate_image_with_hf(prompt_text):
-    # Kita guna model PUBLIC domain (Tiada isu lesen 401)
-    # Model: Stable Diffusion v1.5 (RunwayML)
-    model_id = "runwayml/stable-diffusion-v1-5"
+# --- FUNGSI HUGGINGFACE (FORENSIK MODE) ---
+def debug_hf_image(prompt_text):
+    # Kita guna URL 'Router' yang dia minta tadi
+    # Kita guna model SDXL (Paling standard untuk free tier)
+    API_URL = "https://router.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0"
+    
+    headers = {"Authorization": f"Bearer {HF_API_KEY}"}
+    payload = {"inputs": prompt_text}
+    
+    st.write(f"📡 Menghubungi: {API_URL}")
     
     try:
-        # Arahan mudah: Text -> Image
-        image = client.text_to_image(prompt_text, model=model_id)
-        return image
+        response = requests.post(API_URL, headers=headers, json=payload)
+        
+        # CETAK SEMUA INFO UNTUK KITA BACA
+        st.write(f"Status Code: {response.status_code}") # 200 = Berjaya, 401 = Token Salah, 503 = Loading
+        
+        if response.status_code == 200:
+            return response.content
+        else:
+            # Ini yang kita nak baca! Apa server cakap!
+            st.error("MESEJ DARI SERVER:")
+            st.code(response.text) 
+            return None
+            
     except Exception as e:
-        # Tangkap error dan tunjuk pada Boss
-        st.error(f"❌ Ralat Pelukis: {e}")
+        st.error(f"Connection Error: {e}")
         return None
 
 # --- FRONTEND ---
-st.set_page_config(page_title="AI Raya Generator", layout="wide")
-st.title("🌙 AI Raya Marketing Generator")
-st.caption("Powered by Gemini Flash & HuggingFace Hub")
+st.title("🕵️ Mod Forensik AI")
+user_input = st.text_input("Taip apa-apa (contoh: Kucing pakai songkok)")
+btn = st.button("Test System")
 
-col1, col2 = st.columns([1, 1])
-
-with col1:
-    st.subheader("1. Masukkan Bahan")
-    product_files = st.file_uploader("Upload Produk", type=["jpg", "png", "webp"], accept_multiple_files=True)
-    style_files = st.file_uploader("Upload Style (Optional)", type=["jpg", "png", "webp"], accept_multiple_files=True)
-    user_desc = st.text_area("Arahan", "Contoh: Suasana raya kampung.")
-    generate_btn = st.button("🚀 Jana Gambar", type="primary")
-
-with col2:
-    st.subheader("2. Hasil AI")
-    if generate_btn and product_files:
-        product_images_pil = [Image.open(f) for f in product_files]
-        style_images_pil = [Image.open(f) for f in style_files] if style_files else []
-
-        with st.status("Sedang memproses...", expanded=True) as status:
-            status.write("🧠 Gemini sedang berfikir prompt...")
-            final_prompt = process_text_with_gemini(product_images_pil, style_images_pil, user_desc)
-            
-            if "Error" in final_prompt:
-                st.error(final_prompt)
-            else:
-                status.write("✅ Idea siap! Menghantar ke pelukis...")
-                st.code(final_prompt, language="text")
-                
-                status.write("🎨 Sedang melukis (Tunggu 10-20 saat)...")
-                generated_image = generate_image_with_hf(final_prompt)
-                
-                if generated_image:
-                    st.image(generated_image, caption="Hasil AI")
-                    status.update(label="Siap!", state="complete", expanded=False)
-                    st.balloons()
-                else:
-                    status.update(label="Gagal", state="error")
+if btn and user_input:
+    # 1. Test Gemini
+    st.info("1. Testing Gemini...")
+    prompt = get_gemini_prompt(user_input)
+    st.success(f"Gemini OK: {prompt}")
+    
+    # 2. Test HuggingFace
+    st.info("2. Testing HuggingFace...")
+    image_bytes = debug_hf_image(prompt)
+    
+    if image_bytes:
+        try:
+            img = Image.open(io.BytesIO(image_bytes))
+            st.image(img, caption="BERJAYA!")
+            st.balloons()
+        except:
+            st.error("Dapat data, tapi bukan gambar. (Mungkin error text)")
