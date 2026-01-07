@@ -6,24 +6,19 @@ from PIL import Image
 
 
 
-# --- KONFIGURASI API ---
-
-# Nanti ingatkan saya untuk masukkan API KEY sebenar
-
-GOOGLE_API_KEY = "MASUKKAN_API_KEY_ANDA_DI_SINI"
-
-
-
+--- KONFIGURASI API (VERSI SELAMAT) ---
+# Kod ini akan ambil kunci dari 'Peti Besi' Streamlit (Secrets)
 try:
+    if "GOOGLE_API_KEY" in st.secrets:
+        GOOGLE_API_KEY = st.secrets["GOOGLE_API_KEY"]
+    else:
+        # Fallback kalau test kat laptop, tapi jangan commit key sebenar di sini
+        GOOGLE_API_KEY = "KOSONG"
 
     genai.configure(api_key=GOOGLE_API_KEY)
-
     model = genai.GenerativeModel('gemini-1.5-flash')
-
 except Exception as e:
-
-    st.error(f"Ralat Konfigurasi API Key: {e}")
-
+    st.error(f"Ralat Konfigurasi API: {e}. Sila pastikan API Key ada dalam Streamlit Secrets.")
 
 
 # --- FUNGSI UTAMA ---
@@ -125,5 +120,6 @@ if generate_btn and product_files:
                 col.image(f"https://placehold.co/300x400/png?text=Konsep+Raya+{i+1}", caption=f"Variasi {i+1}")
 
         except Exception as e:
+
 
             st.error(f"Ralat: {e}")
