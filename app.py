@@ -2,7 +2,7 @@ import streamlit as st
 import google.generativeai as genai
 from PIL import Image
 import io
-from huggingface_hub import InferenceClient # Driver Rasmi
+from huggingface_hub import InferenceClient
 
 # --- KONFIGURASI API ---
 try:
@@ -28,7 +28,7 @@ except Exception as e:
 def process_text_with_gemini(product_imgs, style_imgs, user_text):
     prompt_structure = [
         "Role: Photographer.",
-        "Task: Create a simple image prompt.",
+        "Task: Create a detailed image prompt.",
         "INSTRUCTION: Describe the product in a Hari Raya setting.",
         f"USER REQUEST: {user_text}",
         "OUTPUT: A single short paragraph.",
@@ -44,25 +44,36 @@ def process_text_with_gemini(product_imgs, style_imgs, user_text):
     except Exception as e:
         return f"Error Gemini: {e}"
 
-# --- FUNGSI HUGGINGFACE (OFFICIAL + RUNWAYML) ---
+# --- FUNGSI HUGGINGFACE (MANUAL POST - ELAK ERROR STOPITERATION) ---
 def generate_image_with_hf(prompt_text):
-    # Model ini paling selamat (Public Domain)
-    model_id = "runwayml/stable-diffusion-v1-5"
+    # Kita guna model SDXL (Paling cantik)
+    model_id = "stabilityai/stable-diffusion-xl-base-1.0"
     
     try:
-        # Kita minta library uruskan connection
-        image = client.text_to_image(prompt_text, model=model_id)
+        # Kita guna '.post' untuk paksa hantar request tanpa mapping
+        # Ini akan return 'bytes' (data gambar mentah)
+        image_bytes = client.post(
+            json={"inputs": prompt_text}, 
+            model=model_id
+        )
+        
+        # Tukar bytes jadi gambar
+        image = Image.open(io.BytesIO(image_bytes))
         return image
+        
     except Exception as e:
-        # INI PENTING: Kita guna st.exception untuk paksa tunjuk error penuh
-        st.error("❌ Ralat Pelukis (Detail di bawah):")
-        st.exception(e) 
+        st.error("❌ Ralat Pelukis:")
+        # Kalau error pasal loading, bagi tips
+        if "503" in str(e):
+            st.warning("Server tengah loading (503). Sila tekan Jana sekali lagi dalam 20 saat.")
+        else:
+            st.exception(e) # Tunjuk error penuh
         return None
 
 # --- FRONTEND ---
 st.set_page_config(page_title="AI Raya Generator", layout="wide")
 st.title("🌙 AI Raya Marketing Generator")
-st.caption("Mode: Official Library + RunwayML")
+st.caption("Mode: Direct Post via InferenceClient")
 
 col1, col2 = st.columns([1, 1])
 
@@ -89,7 +100,7 @@ with col2:
                 status.write("✅ Idea siap! Menghantar ke pelukis...")
                 st.code(final_prompt, language="text")
                 
-                status.write("🎨 Sedang melukis (Sila tunggu 20-30 saat)...")
+                status.write("🎨 Sedang melukis (Direct Mode)...")
                 generated_image = generate_image_with_hf(final_prompt)
                 
                 if generated_image:
