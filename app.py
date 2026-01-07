@@ -6,7 +6,7 @@ from PIL import Image
 
 
 
---- KONFIGURASI API (VERSI SELAMAT) ---
+# --- KONFIGURASI API (VERSI SELAMAT) ---
 # Kod ini akan ambil kunci dari 'Peti Besi' Streamlit (Secrets)
 try:
     if "GOOGLE_API_KEY" in st.secrets:
@@ -123,3 +123,4 @@ if generate_btn and product_files:
 
 
             st.error(f"Ralat: {e}")
+
