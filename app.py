@@ -1,7 +1,7 @@
 import streamlit as st
 import google.generativeai as genai
 from PIL import Image
-import requests # Kita guna posmen biasa je
+import requests
 import io
 import time
 
@@ -40,36 +40,32 @@ def process_text_with_gemini(product_imgs, style_imgs, user_text):
     except Exception as e:
         return f"Error Gemini: {e}"
 
-# --- FUNGSI HUGGINGFACE (GUNA REQUESTS + ROUTER) ---
+# --- FUNGSI HUGGINGFACE (MODEL OPENJOURNEY) ---
 def generate_image_with_hf(prompt_text):
-    # INI KUNCI DIA:
-    # 1. Guna 'router' (sebab api-inference dah mati)
-    # 2. Guna 'runwayml' (sebab SDXL tadi 404/tak jumpa)
-    API_URL = "https://router.huggingface.co/models/runwayml/stable-diffusion-v1-5"
+    # KITA GUNA MODEL LAIN: OpenJourney (Gaya Midjourney)
+    # Model ni selalunya lebih stabil dari runwayml
+    API_URL = "https://api-inference.huggingface.co/models/prompthero/openjourney"
     
     headers = {"Authorization": f"Bearer {HF_API_KEY}"}
-    payload = {"inputs": prompt_text}
+    payload = {"inputs": f"mdjrny-v4 style, {prompt_text}"} # Kena tambah keyword khas
     
-    # Kita cuba 3 kali (Auto-Retry)
+    # Auto-Retry 3 kali
     for attempt in range(3):
         try:
             response = requests.post(API_URL, headers=headers, json=payload)
             
-            # Kalau berjaya (200)
             if response.status_code == 200:
                 return response.content
             
-            # Kalau server loading (503)
             elif response.status_code == 503:
                 wait_time = response.json().get("estimated_time", 20)
                 st.warning(f"Server tengah loading... tunggu {wait_time:.0f} saat.")
                 time.sleep(wait_time)
-                continue # Ulang semula loop
+                continue
             
-            # Kalau error lain, tunjuk terus
             else:
                 st.error(f"❌ Error Code: {response.status_code}")
-                st.write(response.text) # Tunjuk mesej server
+                st.write(response.text)
                 return None
                 
         except Exception as e:
@@ -81,7 +77,7 @@ def generate_image_with_hf(prompt_text):
 # --- FRONTEND ---
 st.set_page_config(page_title="AI Raya Generator", layout="wide")
 st.title("🌙 AI Raya Marketing Generator")
-st.caption("Mode: Router URL + RunwayML")
+st.caption("Model: OpenJourney (Midjourney Style)")
 
 col1, col2 = st.columns([1, 1])
 
@@ -108,7 +104,7 @@ with col2:
                 status.write("✅ Idea siap! Menghantar ke pelukis...")
                 st.code(final_prompt, language="text")
                 
-                status.write("🎨 Sedang melukis...")
+                status.write("🎨 Sedang melukis (OpenJourney)...")
                 image_bytes = generate_image_with_hf(final_prompt)
                 
                 if image_bytes:
