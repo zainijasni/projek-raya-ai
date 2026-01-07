@@ -6,8 +6,19 @@ import io
 # --- TAMBAH BARIS INI UNTUK CHECK VERSION ---
 st.warning(f"Versi Google AI yang diinstall: {genai.__version__}") 
 # --------------------------------------------
-
 # ... sambung kod lain di bawah ...
+# --- DEBUGGING: Tunjukkan Senarai Model ---
+try:
+    st.subheader("🔍 Diagnostik Model")
+    if st.button("Check Model Availability"):
+        available_models = []
+        for m in genai.list_models():
+            if 'generateContent' in m.supported_generation_methods:
+                available_models.append(m.name)
+        st.write("Model yang ditemui:", available_models)
+except Exception as e:
+    st.error(f"Error Checking Models: {e}")
+# ------------------------------------------
 # --- KONFIGURASI API (RAHSIA) ---
 try:
     # 1. Setup Gemini (Otak)
@@ -101,6 +112,7 @@ with col2:
 
             except Exception as e:
                 st.error(f"Ralat Sistem: {e}")
+
 
 
 
