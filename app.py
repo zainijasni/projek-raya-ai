@@ -11,14 +11,18 @@ try:
         GOOGLE_API_KEY = st.secrets["GOOGLE_API_KEY"]
         genai.configure(api_key=GOOGLE_API_KEY)
         
-        # KITA GUNA MODEL YANG ADA DALAM LIST AWAK (V2.0)
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        # --- INI KUNCI KEJAYAAN ---
+        # Kita guna nama dari Item No.19 dalam list awak
+        model = genai.GenerativeModel('gemini-flash-latest') 
+        # --------------------------
+        
     else:
         st.error("Google API Key tiada dalam Secrets!")
 
     # 2. Setup HuggingFace (Pelukis)
     if "HF_API_KEY" in st.secrets:
         HF_API_KEY = st.secrets["HF_API_KEY"]
+        # Model Percuma: Stability AI XL
         HF_API_URL = "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0"
         headers = {"Authorization": f"Bearer {HF_API_KEY}"}
     else:
@@ -30,14 +34,12 @@ except Exception as e:
 # --- FUNGSI 1: GEMINI (BUAT TEXT PROMPT) ---
 def process_text_with_gemini(product_imgs, style_imgs, user_text):
     prompt_structure = [
-        "Role: Professional Commercial Photographer & Art Director.",
-        "Task: Create a highly detailed image generation prompt for an AI image generator (Stable Diffusion).",
-        "Context: Hari Raya Aidilfitri Marketing Campaign.",
-        "INSTRUCTION 1: Describe the MAIN PRODUCT based on the uploaded product image. Focus on its shape, color, and texture.",
-        "INSTRUCTION 2: Apply the VIBE/STYLE from the style reference image (lighting, mood, background).",
-        "INSTRUCTION 3: Ensure a festive 'Hari Raya' atmosphere (ketupat, pelita, warm lighting, kampung house, or modern luxury).",
+        "Role: Professional Commercial Photographer.",
+        "Task: Create a highly detailed image generation prompt.",
+        "Context: Hari Raya Aidilfitri Marketing.",
+        "INSTRUCTION: Describe the product and place it in a festive Hari Raya setting (kampung/modern).",
         f"USER REQUEST: {user_text}",
-        "OUTPUT FORMAT: A single paragraph of English text describing the visual scene. Start with 'A professional product photography of...'",
+        "OUTPUT: A single paragraph of English text.",
         "\n--- PRODUCT IMAGES ---"
     ]
     for img in product_imgs: prompt_structure.append(img)
@@ -45,6 +47,7 @@ def process_text_with_gemini(product_imgs, style_imgs, user_text):
         prompt_structure.append("\n--- STYLE IMAGES ---")
         for img in style_imgs: prompt_structure.append(img)
 
+    # Guna 'generate_content' biasa
     response = model.generate_content(prompt_structure)
     return response.text
 
@@ -57,22 +60,19 @@ def generate_image_with_hf(prompt_text):
     except Exception as e:
         return None
 
-# --- FRONTEND (MUKA DEPAN) ---
+# --- FRONTEND ---
 st.set_page_config(page_title="AI Raya Generator", layout="wide")
 st.title("🌙 AI Raya Marketing Generator")
-st.markdown("Upload produk anda, AI akan fikirkan idea & lukiskan poster Raya!")
-
-# Papar versi model (kecil di bawah tajuk untuk rujukan kita)
-st.caption("Powered by Gemini 2.0 Flash & Stable Diffusion XL")
+st.caption("Powered by Gemini Flash & Stable Diffusion")
 
 col1, col2 = st.columns([1, 1])
 
 with col1:
     st.subheader("1. Masukkan Bahan")
-    product_files = st.file_uploader("Upload Produk (Wajib)", type=["jpg", "png", "webp"], accept_multiple_files=True)
-    style_files = st.file_uploader("Upload Contoh Style (Optional)", type=["jpg", "png", "webp"], accept_multiple_files=True)
-    user_desc = st.text_area("Arahan Tambahan", "Contoh: Suasana pagi raya yang ceria, atas meja kayu.")
-    generate_btn = st.button("🚀 Jana Gambar Raya", type="primary")
+    product_files = st.file_uploader("Upload Produk", type=["jpg", "png", "webp"], accept_multiple_files=True)
+    style_files = st.file_uploader("Upload Style (Optional)", type=["jpg", "png", "webp"], accept_multiple_files=True)
+    user_desc = st.text_area("Arahan", "Contoh: Suasana raya kampung.")
+    generate_btn = st.button("🚀 Jana Gambar", type="primary")
 
 with col2:
     st.subheader("2. Hasil AI")
@@ -81,29 +81,20 @@ with col2:
         style_images_pil = [Image.open(f) for f in style_files] if style_files else []
 
         with st.status("Sedang memproses...", expanded=True) as status:
-            # Step 1: Gemini fikir prompt
-            status.write("🧠 Gemini 2.0 sedang berfikir idea...")
+            status.write("🧠 Gemini sedang berfikir...")
             try:
                 final_prompt = process_text_with_gemini(product_images_pil, style_images_pil, user_desc)
-                status.write("✅ Idea siap! Menghantar ke pelukis...")
+                status.write("✅ Idea siap! Melukis gambar...")
+                st.code(final_prompt, language="text")
                 
-                with st.expander("Lihat Prompt (Rahsia AI)"):
-                    st.code(final_prompt)
-                
-                # Step 2: HuggingFace lukis gambar
-                status.write("🎨 Sedang melukis gambar (Mungkin ambil masa 30s)...")
                 image_bytes = generate_image_with_hf(final_prompt)
                 
-                # Step 3: Papar gambar
                 try:
                     generated_image = Image.open(io.BytesIO(image_bytes))
-                    st.image(generated_image, caption="Hasil Generasi AI Raya")
+                    st.image(generated_image, caption="Hasil AI")
                     status.update(label="Siap!", state="complete", expanded=False)
-                    st.success("Gambar berjaya dihasilkan!")
-                except Exception as img_error:
-                    # Kadang2 HF bagi error JSON kalau model tengah loading
-                    st.warning("Model Pelukis sedang 'Warming Up'. Sila tekan butang Jana sekali lagi dalam 20 saat.")
+                except:
+                    st.warning("Server Pelukis (HuggingFace) sedang loading. Sila tekan butang Jana sekali lagi.")
                     
             except Exception as e:
-                st.error(f"Ralat Sistem: {e}")
-
+                st.error(f"Ralat: {e}")
