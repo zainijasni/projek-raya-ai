@@ -11,9 +11,9 @@ try:
         GOOGLE_API_KEY = st.secrets["GOOGLE_API_KEY"]
         genai.configure(api_key=GOOGLE_API_KEY)
         
-        # --- KITA TUKAR KE MODEL 2.0 (QUOTA BARU) ---
-        model = genai.GenerativeModel('gemini-2.0-flash') 
-        # --------------------------------------------
+        # --- TUKAR MODEL KE PRO (KUOTA LAIN) ---
+        model = genai.GenerativeModel('gemini-1.5-pro') 
+        # ---------------------------------------
     
     if "HF_API_KEY" in st.secrets:
         HF_API_KEY = st.secrets["HF_API_KEY"]
@@ -23,19 +23,17 @@ try:
 except Exception as e:
     st.error(f"Ralat Setup: {e}")
 
-# --- FUNGSI GEMINI ---
-def process_text_with_gemini(product_imgs, style_imgs, user_text):
+# --- FUNGSI GEMINI (VERSI TEXT ONLY - JIMAT KUOTA) ---
+def process_text_with_gemini(user_text):
+    # Kita tak hantar gambar, kita hantar text je supaya tak kena block
     prompt_structure = [
-        "Role: Photographer.",
-        "Task: Create a simple image prompt.",
-        "INSTRUCTION: Describe the product in a Hari Raya setting.",
-        f"USER REQUEST: {user_text}",
-        "OUTPUT: A single short paragraph.",
-        "\n--- PRODUCT IMAGES ---"
+        "Role: Professional AI Art Prompter.",
+        "Task: Create a detailed image generation prompt for Midjourney/Stable Diffusion.",
+        "Context: Hari Raya Aidilfitri Marketing.",
+        f"USER DESCRIPTION OF PRODUCT & SCENE: {user_text}",
+        "INSTRUCTION: Describe the visual scene vividly. Mention lighting, mood, and festive elements.",
+        "OUTPUT: A single paragraph of English text."
     ]
-    for img in product_imgs: prompt_structure.append(img)
-    if style_imgs:
-        for img in style_imgs: prompt_structure.append(img)
 
     try:
         response = model.generate_content(prompt_structure)
@@ -49,7 +47,6 @@ def generate_image_with_hf(prompt_text):
     API_URL = "https://api-inference.huggingface.co/models/prompthero/openjourney"
     
     headers = {"Authorization": f"Bearer {HF_API_KEY}"}
-    # OpenJourney perlukan keyword 'mdjrny-v4 style'
     payload = {"inputs": f"mdjrny-v4 style, {prompt_text}"} 
     
     # Auto-Retry 3 kali
@@ -68,7 +65,9 @@ def generate_image_with_hf(prompt_text):
             
             else:
                 st.error(f"❌ Error Code: {response.status_code}")
-                st.write(response.text)
+                # Kalau 401, maksudnya Token HF salah
+                if response.status_code == 401:
+                    st.error("TOKEN SALAH: Sila check Secrets HF_API_KEY anda.")
                 return None
                 
         except Exception as e:
@@ -80,33 +79,37 @@ def generate_image_with_hf(prompt_text):
 # --- FRONTEND ---
 st.set_page_config(page_title="AI Raya Generator", layout="wide")
 st.title("🌙 AI Raya Marketing Generator")
-st.caption("Model: Gemini 2.0 Flash + OpenJourney")
+st.caption("Mode: Text-Only Input (Jimat Kuota) + OpenJourney")
 
 col1, col2 = st.columns([1, 1])
 
 with col1:
     st.subheader("1. Masukkan Bahan")
-    product_files = st.file_uploader("Upload Produk", type=["jpg", "png", "webp"], accept_multiple_files=True)
-    style_files = st.file_uploader("Upload Style (Optional)", type=["jpg", "png", "webp"], accept_multiple_files=True)
-    user_desc = st.text_area("Arahan", "Contoh: Suasana raya kampung.")
+    # Kita tutup upload gambar untuk prompt (tapi user masih boleh upload utk hiasan)
+    st.info("💡 Tips: Tulis deskripsi produk anda dengan jelas di bawah.")
+    
+    user_desc = st.text_area("Deskripsi Produk & Suasana (Wajib)", 
+                             "Contoh: Botol minyak wangi warna emas, atas meja kayu, ada pelita dan ketupat, suasana malam raya yang warm.")
+    
     generate_btn = st.button("🚀 Jana Gambar", type="primary")
 
 with col2:
     st.subheader("2. Hasil AI")
-    if generate_btn and product_files:
-        product_images_pil = [Image.open(f) for f in product_files]
-        style_images_pil = [Image.open(f) for f in style_files] if style_files else []
-
+    if generate_btn and user_desc:
+        
         with st.status("Sedang memproses...", expanded=True) as status:
-            status.write("🧠 Gemini 2.0 sedang berfikir prompt...")
-            final_prompt = process_text_with_gemini(product_images_pil, style_images_pil, user_desc)
+            # Step 1: Gemini (Text Only)
+            status.write("🧠 Gemini Pro sedang menulis prompt...")
+            final_prompt = process_text_with_gemini(user_desc)
             
             if "Error" in final_prompt:
                 st.error(final_prompt)
+                status.update(label="Gemini Gagal (Kuota Habis)", state="error")
             else:
                 status.write("✅ Idea siap! Menghantar ke pelukis...")
                 st.code(final_prompt, language="text")
                 
+                # Step 2: HuggingFace
                 status.write("🎨 Sedang melukis (OpenJourney)...")
                 image_bytes = generate_image_with_hf(final_prompt)
                 
