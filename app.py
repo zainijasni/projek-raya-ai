@@ -1,9 +1,9 @@
 import streamlit as st
 import google.generativeai as genai
 from PIL import Image
+import requests # Kita guna requests balik sebab senang nak debug
 import io
 import time
-from huggingface_hub import InferenceClient # Import Library Rasmi
 
 # --- KONFIGURASI API ---
 try:
@@ -15,11 +15,9 @@ try:
     else:
         st.error("Google API Key tiada dalam Secrets!")
 
-    # 2. Setup HuggingFace (Pelukis - Guna Client Rasmi)
+    # 2. Setup HuggingFace (Pelukis)
     if "HF_API_KEY" in st.secrets:
         HF_API_KEY = st.secrets["HF_API_KEY"]
-        # Kita guna Client Rasmi - Tak payah pening pasal URL
-        hf_client = InferenceClient(token=HF_API_KEY)
     else:
         st.error("HuggingFace API Key tiada dalam Secrets!")
 
@@ -46,23 +44,36 @@ def process_text_with_gemini(product_imgs, style_imgs, user_text):
     except Exception as e:
         return f"Error Gemini: {e}"
 
-# --- FUNGSI 2: HUGGINGFACE (LUKIS GAMBAR - GUNA LIBRARY) ---
+# --- FUNGSI 2: HUGGINGFACE (LUKIS GAMBAR - DEBUG MODE) ---
 def generate_image_with_hf(prompt_text):
-    # Kita tukar ke model 'runwayml' yang tak perlu lesen (Public)
-    model_id = "runwayml/stable-diffusion-v1-5"
+    # Guna model public (RunwayML)
+    API_URL = "https://api-inference.huggingface.co/models/runwayml/stable-diffusion-v1-5"
+    headers = {"Authorization": f"Bearer {HF_API_KEY}"}
+    payload = {"inputs": prompt_text}
+
+    st.write("📡 Menghubungi Server Pelukis...")
     
     try:
-        # Arahan mudah kepada plugin: "Tolong lukiskan ini"
-        image = hf_client.text_to_image(prompt_text, model=model_id)
-        return image
+        response = requests.post(API_URL, headers=headers, json=payload)
+        
+        # JIKA BERJAYA (Kod 200)
+        if response.status_code == 200:
+            return response.content
+        
+        # JIKA ERROR, KITa BACA MESEJ DIA
+        else:
+            st.error(f"❌ Error Code: {response.status_code}")
+            st.json(response.json()) # Paparkan raw message dari server
+            return None
+            
     except Exception as e:
-        st.error(f"Ralat Pelukis: {e}")
+        st.error(f"❌ Connection Error: {e}")
         return None
 
 # --- FRONTEND ---
 st.set_page_config(page_title="AI Raya Generator", layout="wide")
 st.title("🌙 AI Raya Marketing Generator")
-st.caption("Powered by Gemini Flash & HuggingFace Official")
+st.caption("Debug Mode Active")
 
 col1, col2 = st.columns([1, 1])
 
@@ -81,28 +92,23 @@ with col2:
 
         with st.status("Sedang memproses...", expanded=True) as status:
             status.write("🧠 Gemini sedang berfikir prompt...")
-            try:
-                final_prompt = process_text_with_gemini(product_images_pil, style_images_pil, user_desc)
+            final_prompt = process_text_with_gemini(product_images_pil, style_images_pil, user_desc)
+            
+            if "Error" in final_prompt:
+                st.error(final_prompt)
+            else:
+                status.write("✅ Idea siap! Menghantar ke pelukis...")
+                st.code(final_prompt, language="text")
                 
-                # Check kalau Gemini bagi error
-                if "Error" in final_prompt:
-                    st.error(final_prompt)
-                else:
-                    status.write("✅ Idea siap! Menghantar ke pelukis...")
-                    st.code(final_prompt, language="text")
-                    
-                    status.write("🎨 Sedang melukis (Tunggu sekejap)...")
-                    
-                    # Panggil fungsi baru
-                    generated_image = generate_image_with_hf(final_prompt)
-                    
-                    if generated_image:
+                # Panggil fungsi debug
+                image_bytes = generate_image_with_hf(final_prompt)
+                
+                if image_bytes:
+                    try:
+                        generated_image = Image.open(io.BytesIO(image_bytes))
                         st.image(generated_image, caption="Hasil AI")
                         status.update(label="Siap!", state="complete", expanded=False)
                         st.balloons()
-                    else:
-                        status.update(label="Gagal", state="error")
-                
-            except Exception as e:
-                st.error(f"Ralat Utama: {e}")
-
+                    except Exception as e:
+                        st.error(f"Gagal buka gambar: {e}")
+                        st.write(image_bytes) # Tunjuk kalau server hantar sampah
