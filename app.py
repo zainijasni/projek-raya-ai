@@ -19,15 +19,18 @@ try:
     else:
         st.error("Google API Key tiada dalam Secrets!")
 
-    # 2. Setup HuggingFace (Pelukis)
+# 2. Setup HuggingFace (Pelukis)
     if "HF_API_KEY" in st.secrets:
         HF_API_KEY = st.secrets["HF_API_KEY"]
-        # Model Percuma: Stability AI XL
-        HF_API_URL = "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0"
+        
+        # --- KITA GUNA MODEL INI (VERSI RINGAN/MYVI) ---
+        HF_API_URL = "https://api-inference.huggingface.co/models/runwayml/stable-diffusion-v1-5"
+        # -----------------------------------------------
+        
         headers = {"Authorization": f"Bearer {HF_API_KEY}"}
     else:
         st.error("HuggingFace API Key tiada dalam Secrets!")
-
+        
 except Exception as e:
     st.error(f"Ralat Setup: {e}")
 
@@ -98,3 +101,4 @@ with col2:
                     
             except Exception as e:
                 st.error(f"Ralat: {e}")
+
