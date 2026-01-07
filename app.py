@@ -12,7 +12,7 @@ try:
         genai.configure(api_key=GOOGLE_API_KEY)
         
         # KITA GUNA MODEL YANG ADA DALAM LIST AWAK (V2.0)
-        model = genai.GenerativeModel('gemini-2.0-flash') 
+        model = genai.GenerativeModel('gemini-1.5-flash')
     else:
         st.error("Google API Key tiada dalam Secrets!")
 
@@ -106,3 +106,4 @@ with col2:
                     
             except Exception as e:
                 st.error(f"Ralat Sistem: {e}")
+
