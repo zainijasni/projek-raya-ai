@@ -1,9 +1,9 @@
 import streamlit as st
 import google.generativeai as genai
 from PIL import Image
-import requests
 import io
-import time  # Library untuk fungsi menunggu
+import time
+from huggingface_hub import InferenceClient # Import Library Rasmi
 
 # --- KONFIGURASI API ---
 try:
@@ -11,20 +11,15 @@ try:
     if "GOOGLE_API_KEY" in st.secrets:
         GOOGLE_API_KEY = st.secrets["GOOGLE_API_KEY"]
         genai.configure(api_key=GOOGLE_API_KEY)
-        # Guna nama model yang ada dalam akaun awak
         model = genai.GenerativeModel('gemini-flash-latest') 
     else:
         st.error("Google API Key tiada dalam Secrets!")
 
-    # 2. Setup HuggingFace (Pelukis)
+    # 2. Setup HuggingFace (Pelukis - Guna Client Rasmi)
     if "HF_API_KEY" in st.secrets:
         HF_API_KEY = st.secrets["HF_API_KEY"]
-        
-        # --- PERUBAHAN UTAMA DI SINI (Guna alamat 'router') ---
-        HF_API_URL = "https://router.huggingface.co/models/runwayml/stable-diffusion-v1-5"
-        # ------------------------------------------------------
-        
-        headers = {"Authorization": f"Bearer {HF_API_KEY}"}
+        # Kita guna Client Rasmi - Tak payah pening pasal URL
+        hf_client = InferenceClient(token=HF_API_KEY)
     else:
         st.error("HuggingFace API Key tiada dalam Secrets!")
 
@@ -45,47 +40,29 @@ def process_text_with_gemini(product_imgs, style_imgs, user_text):
     if style_imgs:
         for img in style_imgs: prompt_structure.append(img)
 
-    response = model.generate_content(prompt_structure)
-    return response.text
+    try:
+        response = model.generate_content(prompt_structure)
+        return response.text
+    except Exception as e:
+        return f"Error Gemini: {e}"
 
-# --- FUNGSI 2: HUGGINGFACE (LUKIS GAMBAR - AUTO RETRY) ---
+# --- FUNGSI 2: HUGGINGFACE (LUKIS GAMBAR - GUNA LIBRARY) ---
 def generate_image_with_hf(prompt_text):
-    payload = {"inputs": prompt_text}
+    # Kita guna model yang paling stabil: Stability AI 2.1
+    model_id = "stabilityai/stable-diffusion-2-1"
     
-    # Kita akan cuba 5 KALI secara automatik
-    max_retries = 5
-    for attempt in range(max_retries):
-        try:
-            response = requests.post(HF_API_URL, headers=headers, json=payload)
-            
-            # Kalau berjaya (Status 200)
-            if response.status_code == 200:
-                return response.content
-            
-            # Kalau server kata "Loading"
-            elif "estimated_time" in response.text:
-                data = response.json()
-                wait_time = data.get("estimated_time", 20)
-                st.warning(f"Percubaan {attempt+1}/{max_retries}: Server sedang 'panaskan enjin'. Menunggu {wait_time:.1f} saat...")
-                time.sleep(wait_time) 
-            
-            else:
-                st.error(f"Error HuggingFace: {response.text}")
-                # Kalau error pelik, stop terus
-                if "supported" in response.text: return None 
-                time.sleep(3)
-                
-        except Exception as e:
-            st.error(f"Connection Error: {e}")
-            time.sleep(5)
-            
-    st.error("Maaf, server terlalu sibuk. Sila cuba sebentar lagi.")
-    return None
+    try:
+        # Arahan mudah kepada plugin: "Tolong lukiskan ini"
+        image = hf_client.text_to_image(prompt_text, model=model_id)
+        return image
+    except Exception as e:
+        st.error(f"Ralat Pelukis: {e}")
+        return None
 
 # --- FRONTEND ---
 st.set_page_config(page_title="AI Raya Generator", layout="wide")
 st.title("🌙 AI Raya Marketing Generator")
-st.caption("Powered by Gemini Flash & Stable Diffusion v1.5")
+st.caption("Powered by Gemini Flash & HuggingFace Official")
 
 col1, col2 = st.columns([1, 1])
 
@@ -106,17 +83,25 @@ with col2:
             status.write("🧠 Gemini sedang berfikir prompt...")
             try:
                 final_prompt = process_text_with_gemini(product_images_pil, style_images_pil, user_desc)
-                status.write("✅ Idea siap! Menghantar ke pelukis...")
-                st.code(final_prompt, language="text")
                 
-                status.write("🎨 Sedang melukis...")
-                image_bytes = generate_image_with_hf(final_prompt)
-                
-                if image_bytes:
-                    generated_image = Image.open(io.BytesIO(image_bytes))
-                    st.image(generated_image, caption="Hasil AI")
-                    status.update(label="Siap!", state="complete", expanded=False)
-                    st.balloons()
+                # Check kalau Gemini bagi error
+                if "Error" in final_prompt:
+                    st.error(final_prompt)
+                else:
+                    status.write("✅ Idea siap! Menghantar ke pelukis...")
+                    st.code(final_prompt, language="text")
+                    
+                    status.write("🎨 Sedang melukis (Tunggu sekejap)...")
+                    
+                    # Panggil fungsi baru
+                    generated_image = generate_image_with_hf(final_prompt)
+                    
+                    if generated_image:
+                        st.image(generated_image, caption="Hasil AI")
+                        status.update(label="Siap!", state="complete", expanded=False)
+                        st.balloons()
+                    else:
+                        status.update(label="Gagal", state="error")
                 
             except Exception as e:
-                st.error(f"Ralat: {e}")
+                st.error(f"Ralat Utama: {e}")
