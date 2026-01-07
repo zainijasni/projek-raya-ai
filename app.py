@@ -1,124 +1,126 @@
 import streamlit as st
-import google.generativeai as genai
-from PIL import Image
-import requests
-import io
-import time
+import pandas as pd
+import os
+from datetime import datetime
 
-# --- KONFIGURASI API ---
-try:
-    if "GOOGLE_API_KEY" in st.secrets:
-        GOOGLE_API_KEY = st.secrets["GOOGLE_API_KEY"]
-        genai.configure(api_key=GOOGLE_API_KEY)
-        
-        # GUNA NAMA SPESIFIK DARI LIST AWAK
-        model = genai.GenerativeModel('gemini-flash-latest') 
-    
-    if "HF_API_KEY" in st.secrets:
-        HF_API_KEY = st.secrets["HF_API_KEY"]
+# --- SETUP AWAL ---
+st.set_page_config(page_title="Sistem Repair Kedai", layout="wide")
+
+# Fail Database Kita (CSV)
+DB_FILE = 'data_tickets.csv'
+
+# Fungsi 1: Load Data dari CSV
+def load_data():
+    if not os.path.exists(DB_FILE):
+        # Kalau fail belum wujud, kita create rangka dia
+        df = pd.DataFrame(columns=["ID", "Tarikh", "Customer", "Phone", "Model", "Masalah", "Status", "Kos", "Image_Path"])
+        df.to_csv(DB_FILE, index=False)
+        return df
     else:
-        st.error("HuggingFace API Key tiada dalam Secrets!")
+        return pd.read_csv(DB_FILE)
 
-except Exception as e:
-    st.error(f"Ralat Setup: {e}")
+# Fungsi 2: Simpan Data Baru
+def save_data(data_baru):
+    df = load_data()
+    # Convert data baru jadi DataFrame dan gabung
+    new_entry = pd.DataFrame([data_baru])
+    df = pd.concat([df, new_entry], ignore_index=True)
+    df.to_csv(DB_FILE, index=False)
 
-# --- FUNGSI GEMINI (TENGOK GAMBAR + TEXT) ---
-def process_multimodal_gemini(product_imgs, user_text):
-    prompt_structure = [
-        "Role: Professional Commercial Photographer.",
-        "Task: Create a vivid image generation prompt based on this product.",
-        "Context: Hari Raya Aidilfitri Marketing Campaign.",
-        "INSTRUCTION 1: Analyze the product image (shape, color, label). Keep the product identity clear.",
-        "INSTRUCTION 2: Place the product in a beautiful Hari Raya setting (Example: Wooden kampung table, pelita lights, ketupat, warm warm lighting).",
-        f"USER REQUEST: {user_text}",
-        "OUTPUT: A single paragraph of English text describing the scene for Stable Diffusion.",
-        "\n--- PRODUCT IMAGES ---"
-    ]
-    for img in product_imgs: prompt_structure.append(img)
+# --- SIDEBAR MENU ---
+st.sidebar.title("🔧 Repair System v1")
+menu = st.sidebar.radio("Menu Utama", ["Dashboard", "Daftar Tiket Baru", "Inventory & Stok"])
 
-    try:
-        response = model.generate_content(prompt_structure)
-        return response.text
-    except Exception as e:
-        if "429" in str(e):
-            return "QUOTA_LIMIT"
-        return f"Error Gemini: {e}"
-
-# --- FUNGSI HUGGINGFACE (MODEL OPENJOURNEY) ---
-def generate_image_with_hf(prompt_text):
-    # Model: OpenJourney (Midjourney Style)
-    API_URL = "https://api-inference.huggingface.co/models/prompthero/openjourney"
+# --- MODUL 1: DASHBOARD ---
+if menu == "Dashboard":
+    st.title("📊 Dashboard Status Repair")
     
-    headers = {"Authorization": f"Bearer {HF_API_KEY}"}
-    payload = {"inputs": f"mdjrny-v4 style, {prompt_text}"} 
+    # Tarik data terkini
+    df = load_data()
     
-    for attempt in range(3):
-        try:
-            response = requests.post(API_URL, headers=headers, json=payload)
-            
-            if response.status_code == 200:
-                return response.content
-            
-            elif response.status_code == 503:
-                wait_time = response.json().get("estimated_time", 15)
-                st.warning(f"Server tengah loading... tunggu {wait_time:.0f} saat.")
-                time.sleep(wait_time)
-                continue
-            
+    # Kira Statistik
+    total_pending = len(df[df['Status'] == 'Pending'])
+    total_waiting = len(df[df['Status'] == 'Waiting Part'])
+    total_done = len(df[df['Status'] == 'Done'])
+    
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Pending Check", total_pending, "Perlu tindakan segera")
+    col2.metric("Waiting Part", total_waiting, "Tunggu barang")
+    col3.metric("Siap (Done)", total_done, "Boleh pickup")
+
+    st.divider()
+    st.subheader("Senarai Laptop Ongoing")
+    
+    # Tunjuk table data sebenar
+    if not df.empty:
+        # Warnakan status supaya nampak jelas
+        def color_status(val):
+            color = 'red' if val == 'Pending' else 'orange' if val == 'Waiting Part' else 'green'
+            return f'color: {color}'
+        
+        st.dataframe(df.style.applymap(color_status, subset=['Status']), use_container_width=True)
+    else:
+        st.info("Belum ada data repair. Sila daftar tiket baru.")
+
+# --- MODUL 2: DAFTAR TIKET ---
+elif menu == "Daftar Tiket Baru":
+    st.title("📝 Daftar Repair Baru")
+
+    with st.form("repair_form"):
+        col_a, col_b = st.columns(2)
+        
+        with col_a:
+            nama = st.text_input("Nama Customer")
+            phone = st.text_input("No. Phone")
+        
+        with col_b:
+            model = st.text_input("Model Laptop/PC")
+            masalah = st.text_area("Masalah (Complaint)")
+        
+        st.divider()
+        st.subheader("📸 Keadaan Fizikal Device")
+        gambar = st.camera_input("Tangkap Gambar")
+        
+        st.divider()
+        st.subheader("Syarat & Peraturan (T&C)")
+        tc_agreed = st.checkbox("Saya setuju dengan 5 Terma & Syarat kedai.")
+        
+        submit = st.form_submit_button("Simpan Tiket")
+        
+        if submit:
+            if not nama or not model:
+                st.error("Nama dan Model wajib isi!")
+            elif not tc_agreed:
+                st.error("Sila tick T&C untuk teruskan.")
             else:
-                st.error(f"❌ Error Code: {response.status_code} - {response.text}")
-                return None
+                # Generate ID Unik (Guna Tarikh+Masa)
+                ticket_id = f"REP-{datetime.now().strftime('%d%H%M')}"
                 
-        except Exception as e:
-            st.error(f"Connection Error: {e}")
-            return None
-    return None
-
-# --- FRONTEND ---
-st.set_page_config(page_title="AI Raya Generator", layout="wide")
-st.title("🌙 AI Raya Marketing Generator")
-st.caption("Upload Gambar Produk -> AI Buat Latar Belakang Raya")
-
-col1, col2 = st.columns([1, 1])
-
-with col1:
-    st.subheader("1. Masukkan Bahan")
-    product_files = st.file_uploader("Upload Gambar Produk (Wajib)", type=["jpg", "png", "webp"], accept_multiple_files=True)
-    user_desc = st.text_area("Arahan Tambahan", "Contoh: Letak atas meja kayu, suasana malam raya, ada lampu pelita.")
-    generate_btn = st.button("🚀 Jana Gambar", type="primary")
-
-with col2:
-    st.subheader("2. Hasil AI")
-    if generate_btn and product_files:
-        product_images_pil = [Image.open(f) for f in product_files]
-
-        with st.status("Sedang memproses...", expanded=True) as status:
-            status.write("🧠 Gemini (Flash Latest) sedang menganalisa produk...")
-            final_prompt = process_multimodal_gemini(product_images_pil, user_desc)
-            
-            if final_prompt == "QUOTA_LIMIT":
-                status.update(label="Kuota Gemini Habis!", state="error")
-                st.error("⚠️ Kuota Google Gemini anda dah limit. Sila cuba esok atau guna API Key baru.")
-            
-            elif "Error" in final_prompt:
-                st.error(final_prompt)
-                status.update(label="Ralat Gemini", state="error")
-            
-            else:
-                status.write("✅ Analisa siap! Menghantar ke pelukis...")
-                with st.expander("Tengok Prompt AI"):
-                    st.write(final_prompt)
+                # Handle Gambar (Simpan dalam folder images)
+                img_path = "Tiada Gambar"
+                if gambar:
+                    img_path = f"images/{ticket_id}.jpg"
+                    with open(img_path, "wb") as f:
+                        f.write(gambar.getbuffer())
                 
-                status.write("🎨 Sedang melukis (OpenJourney)...")
-                image_bytes = generate_image_with_hf(final_prompt)
+                # Data untuk disimpan
+                data_entry = {
+                    "ID": ticket_id,
+                    "Tarikh": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                    "Customer": nama,
+                    "Phone": phone,
+                    "Model": model,
+                    "Masalah": masalah,
+                    "Status": "Pending",
+                    "Kos": 0.0,
+                    "Image_Path": img_path
+                }
                 
-                if image_bytes:
-                    try:
-                        generated_image = Image.open(io.BytesIO(image_bytes))
-                        st.image(generated_image, caption="Hasil AI")
-                        status.update(label="Siap!", state="complete", expanded=False)
-                        st.balloons()
-                    except:
-                        st.error("Gagal memproses gambar.")
-                else:
-                    status.update(label="Gagal", state="error")
+                save_data(data_entry)
+                st.success(f"✅ Tiket {ticket_id} Berjaya Disimpan!")
+                st.balloons()
+
+# --- MODUL 3: INVENTORY (Placeholder) ---
+elif menu == "Inventory & Stok":
+    st.title("📦 Inventory")
+    st.write("Modul ini akan dibangunkan lepas Modul Tiket stabil.")
