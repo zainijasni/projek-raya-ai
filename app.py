@@ -11,9 +11,8 @@ try:
         GOOGLE_API_KEY = st.secrets["GOOGLE_API_KEY"]
         genai.configure(api_key=GOOGLE_API_KEY)
         
-        # Kita guna model standard 1.5 Flash (Selalunya kuota paling besar)
-        # Kalau 404, library automatik akan cari yang sesuai
-        model = genai.GenerativeModel('gemini-1.5-flash') 
+        # GUNA NAMA SPESIFIK DARI LIST AWAK
+        model = genai.GenerativeModel('gemini-flash-latest') 
     
     if "HF_API_KEY" in st.secrets:
         HF_API_KEY = st.secrets["HF_API_KEY"]
@@ -35,27 +34,25 @@ def process_multimodal_gemini(product_imgs, user_text):
         "OUTPUT: A single paragraph of English text describing the scene for Stable Diffusion.",
         "\n--- PRODUCT IMAGES ---"
     ]
-    # Masukkan data gambar sebenar ke dalam prompt
     for img in product_imgs: prompt_structure.append(img)
 
     try:
         response = model.generate_content(prompt_structure)
         return response.text
     except Exception as e:
-        # Kalau kuota habis, return error spesifik
         if "429" in str(e):
             return "QUOTA_LIMIT"
         return f"Error Gemini: {e}"
 
 # --- FUNGSI HUGGINGFACE (MODEL OPENJOURNEY) ---
 def generate_image_with_hf(prompt_text):
-    # Model: OpenJourney (Gaya Midjourney - Cantik & Artistik)
+    # Model: OpenJourney (Midjourney Style)
     API_URL = "https://api-inference.huggingface.co/models/prompthero/openjourney"
     
     headers = {"Authorization": f"Bearer {HF_API_KEY}"}
     payload = {"inputs": f"mdjrny-v4 style, {prompt_text}"} 
     
-    for attempt in range(3): # Cuba 3 kali
+    for attempt in range(3):
         try:
             response = requests.post(API_URL, headers=headers, json=payload)
             
@@ -86,11 +83,7 @@ col1, col2 = st.columns([1, 1])
 
 with col1:
     st.subheader("1. Masukkan Bahan")
-    
-    # --- BUTANG UPLOAD ADA BALIK DI SINI ---
     product_files = st.file_uploader("Upload Gambar Produk (Wajib)", type=["jpg", "png", "webp"], accept_multiple_files=True)
-    # ---------------------------------------
-
     user_desc = st.text_area("Arahan Tambahan", "Contoh: Letak atas meja kayu, suasana malam raya, ada lampu pelita.")
     generate_btn = st.button("🚀 Jana Gambar", type="primary")
 
@@ -100,15 +93,12 @@ with col2:
         product_images_pil = [Image.open(f) for f in product_files]
 
         with st.status("Sedang memproses...", expanded=True) as status:
-            
-            # Step 1: Gemini (Tengok Gambar)
-            status.write("🧠 Gemini sedang menganalisa produk anda...")
+            status.write("🧠 Gemini (Flash Latest) sedang menganalisa produk...")
             final_prompt = process_multimodal_gemini(product_images_pil, user_desc)
             
-            # CHECK KALAU KUOTA HABIS
             if final_prompt == "QUOTA_LIMIT":
                 status.update(label="Kuota Gemini Habis!", state="error")
-                st.error("⚠️ Kuota Google Gemini anda dah limit untuk hari ini. Sila cuba esok atau guna API Key Google yang baru.")
+                st.error("⚠️ Kuota Google Gemini anda dah limit. Sila cuba esok atau guna API Key baru.")
             
             elif "Error" in final_prompt:
                 st.error(final_prompt)
@@ -119,7 +109,6 @@ with col2:
                 with st.expander("Tengok Prompt AI"):
                     st.write(final_prompt)
                 
-                # Step 2: HuggingFace (Lukis)
                 status.write("🎨 Sedang melukis (OpenJourney)...")
                 image_bytes = generate_image_with_hf(final_prompt)
                 
