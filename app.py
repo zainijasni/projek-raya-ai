@@ -10,7 +10,7 @@ try:
     if "GOOGLE_API_KEY" in st.secrets:
         GOOGLE_API_KEY = st.secrets["GOOGLE_API_KEY"]
         genai.configure(api_key=GOOGLE_API_KEY)
-        model = genai.GenerativeModel('gemini-1.5')
+        model = genai.GenerativeModel('gemini-1.5-flash')
     else:
         st.error("Google API Key tiada dalam Secrets!")
 
@@ -97,4 +97,5 @@ with col2:
 
             except Exception as e:
                 st.error(f"Ralat Sistem: {e}")
+
 
